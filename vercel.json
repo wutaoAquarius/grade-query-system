@@ -1,7 +1,9 @@
 {
   "buildCommand": "cd frontend && npm run build",
   "outputDirectory": "frontend/dist",
-  "env": ["POSTGRES_URL"],
+  "env": {
+    "POSTGRES_URL": "@postgres_url"
+  },
   "functions": {
     "api/**/*.js": {
       "runtime": "nodejs20.x"
