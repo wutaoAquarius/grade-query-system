@@ -2,6 +2,7 @@ import express from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
 import db from './db.js';
+import { sampleStudents } from './sample-data.js';
 
 dotenv.config({ path: '../.env.local' });
 
@@ -94,6 +95,62 @@ app.get('/api/students', async (req, res) => {
 // 健康检查端点
 app.get('/api/health', (req, res) => {
   res.json({ status: 'OK', message: '服务器运行正常' });
+});
+
+// 初始化数据库端点
+app.post('/api/init', async (req, res) => {
+  try {
+    console.log('🚀 开始初始化数据库...');
+
+    // 第1步：初始化表
+    console.log('📋 正在创建数据库表...');
+    await db.initializeDatabase();
+    console.log('✓ 数据库表创建成功或已存在');
+
+    // 第2步：检查表是否为空
+    const isEmpty = await db.isTableEmpty();
+
+    if (isEmpty) {
+      console.log('\n📊 正在导入 50 条样例数据...');
+      let insertedCount = 0;
+      
+      for (const student of sampleStudents) {
+        try {
+          await db.insertStudent(student);
+          insertedCount++;
+        } catch (error) {
+          if (error.message.includes('duplicate')) {
+            console.log(`⚠️  学号 ${student.student_id} 已存在，跳过`);
+          } else {
+            throw error;
+          }
+        }
+      }
+      console.log(`✓ 成功导入 ${insertedCount} 条学生数据`);
+    } else {
+      console.log('\n⚠️  数据库已包含数据，跳过数据导入');
+    }
+
+    // 第3步：验证数据
+    const count = await db.getStudentCount('all');
+    console.log(`\n✓ 数据库初始化完成！当前数据库包含 ${count} 条学生记录`);
+
+    return res.json({
+      success: true,
+      message: '数据库初始化成功',
+      data: {
+        totalRecords: count,
+        timestamp: new Date().toISOString()
+      }
+    });
+  } catch (error) {
+    console.error('数据库初始化失败:', error.message);
+    return res.status(500).json({
+      success: false,
+      message: '数据库初始化失败',
+      error: error.message
+    });
+  }
 });
 
 // 404 处理
