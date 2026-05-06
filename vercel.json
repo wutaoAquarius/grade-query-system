@@ -9,6 +9,11 @@
       "runtime": "nodejs20.x"
     }
   },
+  "git": {
+    "production": {
+      "branches": ["master"]
+    }
+  },
   "rewrites": [
     {
       "source": "/api/:path*",
