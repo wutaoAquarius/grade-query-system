@@ -22,6 +22,22 @@ export default async function handler(req, res) {
     });
   }
 
+  // 检查是否配置了数据库URL
+  if (!process.env.POSTGRES_URL) {
+    return res.status(400).json({
+      success: false,
+      message: '数据库未配置',
+      error: 'POSTGRES_URL 环境变量未设置',
+      guide: {
+        step1: '在Vercel项目设置中，进入 Settings > Environment Variables',
+        step2: '添加 POSTGRES_URL 环境变量',
+        step3: '值为你的PostgreSQL连接字符串',
+        step4: '重新部署项目',
+        step5: '调用此接口初始化数据库'
+      }
+    });
+  }
+
   try {
     console.log('🚀 开始初始化数据库...');
 

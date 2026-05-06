@@ -1,6 +1,27 @@
 // Serverless兼容的数据库模块 - 使用@vercel/postgres
 import { sql } from '@vercel/postgres';
 
+// 检查是否能访问数据库
+let dbAvailable = false;
+let dbCheckPromise = null;
+
+async function checkDatabase() {
+  if (dbCheckPromise) return dbCheckPromise;
+  
+  dbCheckPromise = (async () => {
+    try {
+      await sql`SELECT 1`;
+      dbAvailable = true;
+      console.log('✓ 数据库连接可用');
+    } catch (error) {
+      dbAvailable = false;
+      console.warn('⚠️  数据库连接不可用:', error.message);
+    }
+  })();
+  
+  return dbCheckPromise;
+}
+
 // 初始化数据库表
 export async function initializeDatabase() {
   try {
