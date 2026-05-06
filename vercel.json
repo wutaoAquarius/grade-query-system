@@ -1,11 +1,6 @@
 {
   "buildCommand": "cd frontend && npm run build",
   "outputDirectory": "frontend/dist",
-  "functions": {
-    "api/**/*.js": {
-      "runtime": "nodejs20"
-    }
-  },
   "git": {
     "production": {
       "branches": ["master"]
