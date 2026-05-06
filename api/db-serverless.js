@@ -1,39 +1,55 @@
 // Serverless兼容的数据库模块 - 使用native PostgreSQL驱动
 import { Client } from 'pg';
+import { Pool } from 'pg';
 
 let client = null;
+let pool = null;
 
-// 获取数据库客户端
-async function getClient() {
-  if (!client) {
+// 获取数据库连接池
+function getPool() {
+  if (!pool) {
     const connectionString = process.env.POSTGRES_URL;
     
     if (!connectionString) {
       throw new Error('POSTGRES_URL 环境变量未配置');
     }
 
-    client = new Client({
+    pool = new Pool({
       connectionString,
       ssl: {
         rejectUnauthorized: false
-      }
+      },
+      max: 20,
+      idleTimeoutMillis: 30000,
+      connectionTimeoutMillis: 2000,
     });
 
-    try {
-      await client.connect();
-      console.log('✓ 数据库连接成功');
-    } catch (error) {
-      console.error('✗ 数据库连接失败:', error.message);
-      throw error;
-    }
+    pool.on('error', (err) => {
+      console.error('池中发生错误:', err);
+    });
+
+    console.log('✓ 数据库连接池创建成功');
   }
 
-  return client;
+  return pool;
+}
+
+// 获取数据库客户端（从池中获取）
+async function getClient() {
+  try {
+    const pool = getPool();
+    const client = await pool.connect();
+    console.log('✓ 从连接池获取客户端成功');
+    return client;
+  } catch (error) {
+    console.error('✗ 从连接池获取客户端失败:', error.message);
+    throw error;
+  }
 }
 
 // 创建表
 export async function initializeDatabase() {
-  const db = await getClient();
+  const client = await getClient();
   
   try {
     const createTableSQL = `
@@ -53,21 +69,23 @@ export async function initializeDatabase() {
       CREATE INDEX IF NOT EXISTS idx_class ON students(class);
     `;
 
-    await db.query(createTableSQL);
+    await client.query(createTableSQL);
     console.log('✓ 数据库表创建成功或已存在');
     return true;
   } catch (error) {
     console.error('✗ 创建表失败:', error.message);
     throw error;
+  } finally {
+    client.release();
   }
 }
 
 // 按学号查询单个学生
 export async function queryStudentById(studentId) {
-  const db = await getClient();
+  const client = await getClient();
   
   try {
-    const result = await db.query(
+    const result = await client.query(
       `SELECT 
         id, name, student_id, class, 
         chinese_score, math_score, english_score,
@@ -81,15 +99,17 @@ export async function queryStudentById(studentId) {
   } catch (error) {
     console.error('数据库查询失败:', error.message);
     throw error;
+  } finally {
+    client.release();
   }
 }
 
 // 按姓名查询（模糊搜索）
 export async function queryStudentByName(name, limit = 100, offset = 0) {
-  const db = await getClient();
+  const client = await getClient();
   
   try {
-    const result = await db.query(
+    const result = await client.query(
       `SELECT 
         id, name, student_id, class, 
         chinese_score, math_score, english_score,
@@ -103,15 +123,17 @@ export async function queryStudentByName(name, limit = 100, offset = 0) {
   } catch (error) {
     console.error('数据库查询失败:', error.message);
     throw error;
+  } finally {
+    client.release();
   }
 }
 
 // 按班级查询
 export async function queryStudentByClass(className, limit = 100, offset = 0) {
-  const db = await getClient();
+  const client = await getClient();
   
   try {
-    const result = await db.query(
+    const result = await client.query(
       `SELECT 
         id, name, student_id, class, 
         chinese_score, math_score, english_score,
@@ -125,15 +147,17 @@ export async function queryStudentByClass(className, limit = 100, offset = 0) {
   } catch (error) {
     console.error('数据库查询失败:', error.message);
     throw error;
+  } finally {
+    client.release();
   }
 }
 
 // 获取所有学生（分页）
 export async function queryAllStudents(limit = 100, offset = 0) {
-  const db = await getClient();
+  const client = await getClient();
   
   try {
-    const result = await db.query(
+    const result = await client.query(
       `SELECT 
         id, name, student_id, class, 
         chinese_score, math_score, english_score,
@@ -147,39 +171,43 @@ export async function queryAllStudents(limit = 100, offset = 0) {
   } catch (error) {
     console.error('数据库查询失败:', error.message);
     throw error;
+  } finally {
+    client.release();
   }
 }
 
 // 获取查询结果总数
 export async function getStudentCount(type, value = null) {
-  const db = await getClient();
+  const client = await getClient();
   
   try {
     let result;
     
     if (type === 'id') {
-      result = await db.query('SELECT COUNT(*) FROM students WHERE student_id = $1', [value]);
+      result = await client.query('SELECT COUNT(*) FROM students WHERE student_id = $1', [value]);
     } else if (type === 'name') {
-      result = await db.query('SELECT COUNT(*) FROM students WHERE name LIKE $1', [`%${value}%`]);
+      result = await client.query('SELECT COUNT(*) FROM students WHERE name LIKE $1', [`%${value}%`]);
     } else if (type === 'class') {
-      result = await db.query('SELECT COUNT(*) FROM students WHERE class = $1', [value]);
+      result = await client.query('SELECT COUNT(*) FROM students WHERE class = $1', [value]);
     } else {
-      result = await db.query('SELECT COUNT(*) FROM students');
+      result = await client.query('SELECT COUNT(*) FROM students');
     }
     
     return parseInt(result.rows[0].count, 10);
   } catch (error) {
     console.error('获取数据总数失败:', error.message);
     throw error;
+  } finally {
+    client.release();
   }
 }
 
 // 插入学生数据
 export async function insertStudent(student) {
-  const db = await getClient();
+  const client = await getClient();
   
   try {
-    const result = await db.query(
+    const result = await client.query(
       `INSERT INTO students (name, student_id, class, chinese_score, math_score, english_score)
        VALUES ($1, $2, $3, $4, $5, $6)
        RETURNING *`,
@@ -189,44 +217,50 @@ export async function insertStudent(student) {
   } catch (error) {
     console.error('插入学生数据失败:', error.message);
     throw error;
+  } finally {
+    client.release();
   }
 }
 
 // 检查表是否为空
 export async function isTableEmpty() {
-  const db = await getClient();
+  const client = await getClient();
   
   try {
-    const result = await db.query('SELECT COUNT(*) FROM students');
+    const result = await client.query('SELECT COUNT(*) FROM students');
     return parseInt(result.rows[0].count, 10) === 0;
   } catch (error) {
     console.error('检查表是否为空失败:', error.message);
     throw error;
+  } finally {
+    client.release();
   }
 }
 
 // 清空表（用于重新初始化）
 export async function clearTable() {
-  const db = await getClient();
+  const client = await getClient();
   
   try {
-    await db.query('DELETE FROM students');
+    await client.query('DELETE FROM students');
     console.log('✓ 表已清空');
   } catch (error) {
     console.error('清空表失败:', error.message);
     throw error;
+  } finally {
+    client.release();
   }
 }
 
-// 关闭连接
+// 关闭连接池
 export async function closeConnection() {
-  if (client) {
+  if (pool) {
     try {
-      await client.end();
-      client = null;
-      console.log('✓ 数据库连接已关闭');
+      await pool.end();
+      pool = null;
+      console.log('✓ 数据库连接池已关闭');
     } catch (error) {
-      console.error('关闭连接失败:', error.message);
+      console.error('关闭连接池失败:', error.message);
       throw error;
     }
   }
